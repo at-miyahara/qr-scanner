@@ -67,6 +67,7 @@
     const html5Qrcode = new Html5Qrcode("qr-reader");
     let lastScannedId = null;
     let scanCooldown = false;
+    let scannedItems = [];
 
     Html5Qrcode.getCameras()
       .then(cameras => {
@@ -79,8 +80,6 @@
           { facingMode: "environment" },
           { fps: 10, qrbox: 250 },
           (decodedText) => {
-            if (scanCooldown) return;
-
             // itemId を抽出
             let itemId = null;
             try {
@@ -94,18 +93,33 @@
             }
 
             if (!itemId) return;
-            if (itemId === lastScannedId) return;
 
+            // カメラをかざしっぱなしの時の連続発火によるちらつきを防止
+            if (scanCooldown && lastScannedId === itemId) return;
+            
             lastScannedId = itemId;
             scanCooldown = true;
-            setTimeout(() => {
-              scanCooldown = false;
-              lastScannedId = null;
-            }, 2500);
+            setTimeout(() => { scanCooldown = false; }, 2000); // 2秒間は同じコードの連続判定を抑止
 
-            // 結果表示
             const resultDiv = document.getElementById('result');
-            resultDiv.style.background = '#d1fae5';
+
+            // 既にこのセッションで読み取った履歴がある場合
+            if (scannedItems.includes(itemId)) {
+              resultDiv.style.background = '#fef08a'; // 黄色で警告
+              resultDiv.innerText = '⚠️ 既に読み取り済みです: ' + itemId;
+
+              setTimeout(() => {
+                if (lastScannedId === itemId) {
+                  resultDiv.style.background = '#fff';
+                  resultDiv.innerText = '次のQRコードをかざしてください...';
+                }
+              }, 2500);
+              return;
+            }
+
+            // 新規読み取りの場合
+            scannedItems.push(itemId);
+            resultDiv.style.background = '#d1fae5'; // 緑色で成功
             resultDiv.innerText = '✅ 読み取り成功: ' + itemId;
 
             // 親ウィンドウ（GAS）へ送信
@@ -116,10 +130,12 @@
               );
             }
 
-            // 2.5秒後にフィードバックをリセット
+            // フィードバックリセット
             setTimeout(() => {
-              resultDiv.style.background = '#fff';
-              resultDiv.innerText = '次のQRコードをかざしてください...';
+              if (lastScannedId === itemId) {
+                resultDiv.style.background = '#fff';
+                resultDiv.innerText = '次のQRコードをかざしてください...';
+              }
             }, 2500);
           }
         );
