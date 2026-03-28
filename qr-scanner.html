@@ -8,7 +8,7 @@
   <style>
     body {
       font-family: sans-serif;
-      padding: 20px;
+      padding: 15px 15px 140px 15px; /* 下部パネルのスペースを開ける */
       background: #f9f9f9;
       margin: 0;
     }
@@ -22,8 +22,19 @@
       max-width: 400px;
       margin: 0 auto;
     }
+    #bottom-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #f9f9f9;
+      padding: 10px 20px 20px;
+      box-sizing: border-box;
+      box-shadow: 0 -5px 15px rgba(0,0,0,0.05); /* うっすら影で浮かす */
+      z-index: 1000;
+    }
     #result {
-      margin-top: 16px;
+      margin-top: 0;
       padding: 14px;
       border-radius: 8px;
       background: #fff;
@@ -38,8 +49,10 @@
     }
     #close-btn {
       display: block;
-      margin: 20px auto 0;
-      padding: 10px 32px;
+      width: 100%;
+      max-width: 400px;
+      margin: 10px auto 0;
+      padding: 14px 32px;
       border-radius: 8px;
       border: none;
       background: #6b7280;
@@ -55,8 +68,11 @@
 <body>
   <h2>📷 QRコードスキャン</h2>
   <div id="qr-reader"></div>
-  <div id="result">カメラを起動中...</div>
-  <button id="close-btn" onclick="window.close()">閉じる</button>
+
+  <div id="bottom-panel">
+    <div id="result">カメラを起動中...</div>
+    <button id="close-btn" onclick="window.close()">画面を閉じる</button>
+  </div>
 
   <script>
     // GASのWebアプリはiframe内 (*.googleusercontent.com) で動くため
