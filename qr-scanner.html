@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QRスキャン</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f9f9f9;
+      margin: 0;
+    }
+    h2 {
+      text-align: center;
+      font-size: 1.2rem;
+      margin-bottom: 16px;
+    }
+    #qr-reader {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    #result {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #ddd;
+      text-align: center;
+      font-size: 0.95rem;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.3s;
+    }
+    #close-btn {
+      display: block;
+      margin: 20px auto 0;
+      padding: 10px 32px;
+      border-radius: 8px;
+      border: none;
+      background: #6b7280;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #close-btn:hover {
+      background: #4b5563;
+    }
+  </style>
+</head>
+<body>
+  <h2>📷 QRコードスキャン</h2>
+  <div id="qr-reader"></div>
+  <div id="result">カメラを起動中...</div>
+  <button id="close-btn" onclick="window.close()">閉じる</button>
+
+  <script>
+    // ★ GASのWeb App URLに書き換えてください
+    const GAS_ORIGIN = 'https://script.google.com';
+
+    const html5Qrcode = new Html5Qrcode("qr-reader");
+    let lastScannedId = null;
+    let scanCooldown = false;
+
+    Html5Qrcode.getCameras()
+      .then(cameras => {
+        if (!cameras || cameras.length === 0) {
+          document.getElementById('result').innerText = '❌ カメラが見つかりません';
+          return;
+        }
+
+        return html5Qrcode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          (decodedText) => {
+            if (scanCooldown) return;
+
+            // itemId を抽出
+            let itemId = null;
+            try {
+              itemId = new URL(decodedText).searchParams.get("item");
+            } catch (e) {
+              if (decodedText.indexOf('item=') !== -1) {
+                itemId = decodedText.split('item=')[1].split('&')[0];
+              } else {
+                itemId = decodedText.trim();
+              }
+            }
+
+            if (!itemId) return;
+            if (itemId === lastScannedId) return;
+
+            lastScannedId = itemId;
+            scanCooldown = true;
+            setTimeout(() => {
+              scanCooldown = false;
+              lastScannedId = null;
+            }, 2500);
+
+            // 結果表示
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.background = '#d1fae5';
+            resultDiv.innerText = '✅ 読み取り成功: ' + itemId;
+
+            // 親ウィンドウ（GAS）へ送信
+            if (window.opener) {
+              window.opener.postMessage(
+                { type: 'QR_SCANNED', itemId: itemId },
+                GAS_ORIGIN
+              );
+            }
+
+            // 2.5秒後にフィードバックをリセット
+            setTimeout(() => {
+              resultDiv.style.background = '#fff';
+              resultDiv.innerText = '次のQRコードをかざしてください...';
+            }, 2500);
+          }
+        );
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById('result').style.background = '#fee2e2';
+        document.getElementById('result').innerText = '❌ カメラを起動できませんでした。\nブラウザのカメラ許可を確認してください。';
+      });
+  </script>
+</body>
+</html>
