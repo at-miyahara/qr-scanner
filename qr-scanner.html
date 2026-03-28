@@ -59,8 +59,10 @@
   <button id="close-btn" onclick="window.close()">閉じる</button>
 
   <script>
-    // ★ GASのWeb App URLに書き換えてください
-    const GAS_ORIGIN = 'https://script.google.com';
+    // GASのWebアプリはiframe内 (*.googleusercontent.com) で動くため
+    // postMessage の targetOrigin は '*' にする。
+    // ※ GAS側で event.origin をチェックしているので安全。
+    const TARGET_ORIGIN = '*';
 
     const html5Qrcode = new Html5Qrcode("qr-reader");
     let lastScannedId = null;
@@ -110,7 +112,7 @@
             if (window.opener) {
               window.opener.postMessage(
                 { type: 'QR_SCANNED', itemId: itemId },
-                GAS_ORIGIN
+                TARGET_ORIGIN
               );
             }
 
