@@ -165,20 +165,23 @@
                         }, 2500);
                     }
                 ).then(() => {
-                    // カメラ起動成功後にズーム設定を試行
+                    // カメラ起動成功後にズーム設定を試行（互換性重視の直接アクセス）
                     try {
-                        const track = html5Qrcode.getRunningTrack();
-                        if (track && typeof track.getCapabilities === 'function') {
-                            const capabilities = track.getCapabilities();
-                            if (capabilities.zoom) {
-                                // 2.0倍、または可能な最大値を倍率として設定
-                                const zoomValue = Math.min(2.0, capabilities.zoom.max);
-                                track.applyConstraints({
-                                    advanced: [{ zoom: zoomValue }]
-                                }).catch(e => console.warn("Zoom constraint failed:", e));
-                                console.log(`Zoom set to: ${zoomValue}`);
-                            } else {
-                                console.log("Zoom is not supported by this camera.");
+                        const videoElement = document.querySelector('#qr-reader video');
+                        if (videoElement && videoElement.srcObject) {
+                            const track = videoElement.srcObject.getVideoTracks()[0];
+                            if (track && typeof track.getCapabilities === 'function') {
+                                const capabilities = track.getCapabilities();
+                                if (capabilities.zoom) {
+                                    // 2.0倍、または可能な最大値を倍率として設定
+                                    const zoomValue = Math.min(2.0, capabilities.zoom.max);
+                                    track.applyConstraints({
+                                        advanced: [{ zoom: zoomValue }]
+                                    }).catch(e => console.warn("Zoom constraint failed:", e));
+                                    console.log(`Zoom set via DOM to: ${zoomValue}`);
+                                } else {
+                                    console.log("Zoom is not supported by this camera.");
+                                }
                             }
                         }
                     } catch (e) {
