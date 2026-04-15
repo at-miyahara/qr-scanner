@@ -174,7 +174,7 @@
                                 const capabilities = track.getCapabilities();
                                 if (capabilities.zoom) {
                                     // 2.0倍、または可能な最大値を倍率として設定
-                                    const zoomValue = Math.min(2.0, capabilities.zoom.max);
+                                    const zoomValue = Math.min(3.0, capabilities.zoom.max);
                                     track.applyConstraints({
                                         advanced: [{ zoom: zoomValue }]
                                     }).catch(e => console.warn("Zoom constraint failed:", e));
