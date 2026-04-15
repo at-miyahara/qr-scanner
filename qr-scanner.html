@@ -9,34 +9,49 @@
     <style>
         body {
             font-family: sans-serif;
-            padding: 15px 15px 140px 15px;
-            /* 下部パネルのスペースを開ける */
-            background: #f9f9f9;
             margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh; /* モバイル向け動的ビューポート高さ */
+            background: #f9f9f9;
+            overflow: hidden;
         }
 
         h2 {
             text-align: center;
-            font-size: 1.2rem;
-            margin-bottom: 16px;
+            font-size: 1.1rem;
+            margin: 12px 0;
+            flex-shrink: 0;
         }
 
         #qr-reader {
-            width: 100%;
+            flex: 1;
+            width: 100% !important;
             max-width: 400px;
-            margin: 0 auto;
+            margin: 0 auto !important;
+            border: none !important;
+            background: #222;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* ライブラリが生成するビデオ要素を画面に合わせてフィットさせる */
+        #qr-reader video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
         }
 
         #bottom-panel {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
             background: #f9f9f9;
-            padding: 10px 20px 20px;
+            padding: 12px 20px 24px;
             box-sizing: border-box;
             box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.05);
-            /* うっすら影で浮かす */
+            flex-shrink: 0;
             z-index: 1000;
         }
 
@@ -59,7 +74,7 @@
             display: block;
             width: 100%;
             max-width: 400px;
-            margin: 10px auto 0;
+            margin: 12px auto 0;
             padding: 14px 32px;
             border-radius: 8px;
             border: none;
@@ -87,7 +102,6 @@
     <script>
         // GASのWebアプリはiframe内 (*.googleusercontent.com) で動くため
         // postMessage の targetOrigin は '*' にする。
-        // ※ GAS側で event.origin をチェックしているので安全。
         const TARGET_ORIGIN = '*';
 
         const html5Qrcode = new Html5Qrcode("qr-reader");
@@ -102,9 +116,16 @@
                     return;
                 }
 
+                // qrbox を画面サイズに合わせて動的に計算（幅の70%）
+                const qrboxFunction = (viewfinderWidth, viewfinderHeight) => {
+                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                    const size = Math.floor(minEdge * 0.7);
+                    return { width: size, height: size };
+                };
+
                 return html5Qrcode.start(
                     { facingMode: "environment" },
-                    { fps: 10, qrbox: 250 },
+                    { fps: 10, qrbox: qrboxFunction },
                     (decodedText) => {
                         // itemId を抽出
                         let itemId = null;
@@ -120,20 +141,18 @@
 
                         if (!itemId) return;
 
-                        // カメラをかざしっぱなしの時の連続発火によるちらつきを防止
+                        // 同一コードの連続検知抑制
                         if (scanCooldown && lastScannedId === itemId) return;
 
                         lastScannedId = itemId;
                         scanCooldown = true;
-                        setTimeout(() => { scanCooldown = false; }, 2000); // 2秒間は同じコードの連続判定を抑止
+                        setTimeout(() => { scanCooldown = false; }, 2000);
 
                         const resultDiv = document.getElementById('result');
 
-                        // 既にこのセッションで読み取った履歴がある場合
                         if (scannedItems.includes(itemId)) {
-                            resultDiv.style.background = '#fef08a'; // 黄色で警告
+                            resultDiv.style.background = '#fef08a';
                             resultDiv.innerText = '⚠️ 既に読み取り済みです: ' + itemId;
-
                             setTimeout(() => {
                                 if (lastScannedId === itemId) {
                                     resultDiv.style.background = '#fff';
@@ -143,12 +162,10 @@
                             return;
                         }
 
-                        // 新規読み取りの場合
                         scannedItems.push(itemId);
-                        resultDiv.style.background = '#d1fae5'; // 緑色で成功
+                        resultDiv.style.background = '#d1fae5';
                         resultDiv.innerText = '✅ 読み取り成功: ' + itemId;
 
-                        // 親ウィンドウ（GAS）へ送信
                         if (window.opener) {
                             window.opener.postMessage(
                                 { type: 'QR_SCANNED', itemId: itemId },
@@ -156,7 +173,6 @@
                             );
                         }
 
-                        // フィードバックリセット
                         setTimeout(() => {
                             if (lastScannedId === itemId) {
                                 resultDiv.style.background = '#fff';
@@ -164,35 +180,12 @@
                             }
                         }, 2500);
                     }
-                ).then(() => {
-                    // カメラ起動成功後にズーム設定を試行（互換性重視の直接アクセス）
-                    try {
-                        const videoElement = document.querySelector('#qr-reader video');
-                        if (videoElement && videoElement.srcObject) {
-                            const track = videoElement.srcObject.getVideoTracks()[0];
-                            if (track && typeof track.getCapabilities === 'function') {
-                                const capabilities = track.getCapabilities();
-                                if (capabilities.zoom) {
-                                    // 2.0倍、または可能な最大値を倍率として設定
-                                    const zoomValue = Math.min(3.0, capabilities.zoom.max);
-                                    track.applyConstraints({
-                                        advanced: [{ zoom: zoomValue }]
-                                    }).catch(e => console.warn("Zoom constraint failed:", e));
-                                    console.log(`Zoom set via DOM to: ${zoomValue}`);
-                                } else {
-                                    console.log("Zoom is not supported by this camera.");
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn("Failed to apply zoom constraints:", e);
-                    }
-                });
+                );
             })
             .catch(err => {
                 console.error(err);
                 document.getElementById('result').style.background = '#fee2e2';
-                document.getElementById('result').innerText = '❌ カメラを起動できませんでした。\nブラウザのカメラ許可を確認してください。';
+                document.getElementById('result').innerText = '❌ カメラを起動できませんでした。';
             });
     </script>
 </body>
