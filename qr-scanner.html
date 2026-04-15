@@ -14,7 +14,8 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            height: 100dvh; /* モバイル向け動的ビューポート高さ */
+            height: 100dvh;
+            /* モバイル向け動的ビューポート高さ */
             background: #f9f9f9;
             overflow: hidden;
         }
@@ -180,7 +181,30 @@
                             }
                         }, 2500);
                     }
-                );
+                ).then(() => {
+                    // カメラ起動成功後にズーム設定を試行（互換性重視の直接アクセス）
+                    try {
+                        const videoElement = document.querySelector('#qr-reader video');
+                        if (videoElement && videoElement.srcObject) {
+                            const track = videoElement.srcObject.getVideoTracks()[0];
+                            if (track && typeof track.getCapabilities === 'function') {
+                                const capabilities = track.getCapabilities();
+                                if (capabilities.zoom) {
+                                    // 2.0倍、または可能な最大値を倍率として設定
+                                    const zoomValue = Math.min(3.0, capabilities.zoom.max);
+                                    track.applyConstraints({
+                                        advanced: [{ zoom: zoomValue }]
+                                    }).catch(e => console.warn("Zoom constraint failed:", e));
+                                    console.log(`Zoom set via DOM to: ${zoomValue}`);
+                                } else {
+                                    console.log("Zoom is not supported by this camera.");
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Failed to apply zoom constraints:", e);
+                    }
+                });
             })
             .catch(err => {
                 console.error(err);
