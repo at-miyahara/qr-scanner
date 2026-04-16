@@ -126,7 +126,7 @@
 
                 return html5Qrcode.start(
                     { facingMode: "environment" },
-                    { fps: 20, qrbox: qrboxFunction },
+                    { fps: 5, qrbox: qrboxFunction },
                     (decodedText) => {
                         // itemId を抽出
                         let itemId = null;
