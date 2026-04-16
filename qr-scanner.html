@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRスキャン</title>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <title>QRスキャン (高速版)</title>
     <style>
         body {
             font-family: sans-serif;
@@ -27,24 +26,23 @@
             flex-shrink: 0;
         }
 
-        #qr-reader {
+        #qr-reader-container {
             flex: 1;
-            width: 100% !important;
+            width: 100%;
             max-width: 400px;
-            margin: 0 auto !important;
-            border: none !important;
+            margin: 0 auto;
+            position: relative;
             background: #222;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
             overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        /* ライブラリが生成するビデオ要素を画面に合わせてフィットさせる */
-        #qr-reader video {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         #bottom-panel {
@@ -93,42 +91,64 @@
 
 <body>
     <h2>📷 QRコードスキャン</h2>
-    <div id="qr-reader"></div>
+    <div id="qr-reader-container">
+        <video id="video" autoplay playsinline></video>
+    </div>
 
     <div id="bottom-panel">
         <div id="result">カメラを起動中...</div>
         <button id="close-btn" onclick="window.close()">画面を閉じる</button>
     </div>
 
-    <script>
-        // GASのWebアプリはiframe内 (*.googleusercontent.com) で動くため
-        // postMessage の targetOrigin は '*' にする。
-        const TARGET_ORIGIN = '*';
+    <script type="module">
+        import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
 
-        const html5Qrcode = new Html5Qrcode("qr-reader");
+        const TARGET_ORIGIN = '*';
+        const video = document.getElementById("video");
+        const resultDiv = document.getElementById("result");
+        
         let lastScannedId = null;
         let scanCooldown = false;
         let scannedItems = [];
 
-        Html5Qrcode.getCameras()
-            .then(cameras => {
-                if (!cameras || cameras.length === 0) {
-                    document.getElementById('result').innerText = '❌ カメラが見つかりません';
-                    return;
+        async function startScanner() {
+            try {
+                // カメラストリームの取得
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                video.srcObject = stream;
+
+                // ズーム設定の試行
+                const track = stream.getVideoTracks()[0];
+                try {
+                    const capabilities = track.getCapabilities();
+                    if (capabilities.zoom) {
+                        // 2.5倍、または可能な最大値を倍率として設定
+                        const zoomValue = Math.min(2.5, capabilities.zoom.max);
+                        await track.applyConstraints({
+                            advanced: [{ zoom: zoomValue }]
+                        });
+                        console.log(`Zoom set to: ${zoomValue}`);
+                    }
+                } catch (e) {
+                    console.warn("Zoom support check failed or not available:", e);
                 }
 
-                // qrbox を画面サイズに合わせて動的に計算（幅の70%）
-                const qrboxFunction = (viewfinderWidth, viewfinderHeight) => {
-                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                    const size = Math.floor(minEdge * 0.7);
-                    return { width: size, height: size };
-                };
+                const codeReader = new BrowserMultiFormatReader();
+                resultDiv.innerText = 'スキャン準備完了';
 
-                return html5Qrcode.start(
-                    { facingMode: "environment" },
-                    { fps: 5, qrbox: qrboxFunction },
-                    (decodedText) => {
-                        // itemId を抽出
+                // スキャンループの開始
+                codeReader.decodeFromVideoElement(video, (result, err) => {
+                    if (result) {
+                        const decodedText = result.getText();
+                        
+                        // itemId を抽出 (URLパラメータまたはベタ打ちテキスト)
                         let itemId = null;
                         try {
                             itemId = new URL(decodedText).searchParams.get("item");
@@ -147,26 +167,24 @@
 
                         lastScannedId = itemId;
                         scanCooldown = true;
-                        setTimeout(() => { scanCooldown = false; }, 2000);
+                        
+                        // 1.5秒間は同一コードの通知を抑止
+                        setTimeout(() => { scanCooldown = false; }, 1500);
 
-                        const resultDiv = document.getElementById('result');
-
+                        // 既にこのセッションで読み取った履歴がある場合
                         if (scannedItems.includes(itemId)) {
-                            resultDiv.style.background = '#fef08a';
+                            resultDiv.style.background = '#fef08a'; // 黄色
                             resultDiv.innerText = '⚠️ 既に読み取り済みです: ' + itemId;
-                            setTimeout(() => {
-                                if (lastScannedId === itemId) {
-                                    resultDiv.style.background = '#fff';
-                                    resultDiv.innerText = '次のQRコードをかざしてください...';
-                                }
-                            }, 2500);
+                            resetFeedback(itemId);
                             return;
                         }
 
+                        // 新規読み取りの場合
                         scannedItems.push(itemId);
-                        resultDiv.style.background = '#d1fae5';
+                        resultDiv.style.background = '#d1fae5'; // 緑色
                         resultDiv.innerText = '✅ 読み取り成功: ' + itemId;
 
+                        // 親ウィンドウ（GAS）へ送信
                         if (window.opener) {
                             window.opener.postMessage(
                                 { type: 'QR_SCANNED', itemId: itemId },
@@ -174,43 +192,28 @@
                             );
                         }
 
-                        setTimeout(() => {
-                            if (lastScannedId === itemId) {
-                                resultDiv.style.background = '#fff';
-                                resultDiv.innerText = '次のQRコードをかざしてください...';
-                            }
-                        }, 2500);
-                    }
-                ).then(() => {
-                    // カメラ起動成功後にズーム設定を試行（互換性重視の直接アクセス）
-                    try {
-                        const videoElement = document.querySelector('#qr-reader video');
-                        if (videoElement && videoElement.srcObject) {
-                            const track = videoElement.srcObject.getVideoTracks()[0];
-                            if (track && typeof track.getCapabilities === 'function') {
-                                const capabilities = track.getCapabilities();
-                                if (capabilities.zoom) {
-                                    // 2.0倍、または可能な最大値を倍率として設定
-                                    const zoomValue = Math.min(2.0, capabilities.zoom.max);
-                                    track.applyConstraints({
-                                        advanced: [{ zoom: zoomValue }]
-                                    }).catch(e => console.warn("Zoom constraint failed:", e));
-                                    console.log(`Zoom set via DOM to: ${zoomValue}`);
-                                } else {
-                                    console.log("Zoom is not supported by this camera.");
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn("Failed to apply zoom constraints:", e);
+                        resetFeedback(itemId);
                     }
                 });
-            })
-            .catch(err => {
-                console.error(err);
-                document.getElementById('result').style.background = '#fee2e2';
-                document.getElementById('result').innerText = '❌ カメラを起動できませんでした。';
-            });
+
+            } catch (err) {
+                console.error("Scanner startup failed:", err);
+                resultDiv.style.background = '#fee2e2';
+                resultDiv.innerText = '❌ カメラを起動できませんでした。ブラウザの設定を確認してください。';
+            }
+        }
+
+        function resetFeedback(currentId) {
+            setTimeout(() => {
+                if (lastScannedId === currentId) {
+                    resultDiv.style.background = '#fff';
+                    resultDiv.innerText = '次のQRコードをかざしてください...';
+                }
+            }, 3000);
+        }
+
+        // 初期化実行
+        startScanner();
     </script>
 </body>
 
