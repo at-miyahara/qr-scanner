@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRコードスキャナ</title>
+    <title>QRスキャン (高速版)</title>
     <style>
         body {
             font-family: sans-serif;
@@ -184,7 +184,7 @@
         const video = document.getElementById("video");
         const resultDiv = document.getElementById("result");
         
-        let lastScannedId = null;
+        let lastScannedUuid = null;
         let scanCooldown = false;
         let scannedItems = [];
 
@@ -225,51 +225,51 @@
                     if (result) {
                         const decodedText = result.getText();
                         
-                        // itemId を抽出 (URLパラメータまたはベタ打ちテキスト)
-                        let itemId = null;
+                        // UUID を抽出 (URLパラメータまたはベタ打ちテキスト)
+                        let scannedUuid = null;
                         try {
-                            itemId = new URL(decodedText).searchParams.get("item");
+                            scannedUuid = new URL(decodedText).searchParams.get("item");
                         } catch (e) {
                             if (decodedText.indexOf('item=') !== -1) {
-                                itemId = decodedText.split('item=')[1].split('&')[0];
+                                scannedUuid = decodedText.split('item=')[1].split('&')[0];
                             } else {
-                                itemId = decodedText.trim();
+                                scannedUuid = decodedText.trim();
                             }
                         }
 
-                        if (!itemId) return;
+                        if (!scannedUuid) return;
 
                         // 同一コードの連続検知抑制
-                        if (scanCooldown && lastScannedId === itemId) return;
+                        if (scanCooldown && lastScannedUuid === scannedUuid) return;
 
-                        lastScannedId = itemId;
+                        lastScannedUuid = scannedUuid;
                         scanCooldown = true;
                         
                         // 1.5秒間は同一コードの通知を抑止
                         setTimeout(() => { scanCooldown = false; }, 1500);
 
                         // 既にこのセッションで読み取った履歴がある場合
-                        if (scannedItems.includes(itemId)) {
+                        if (scannedItems.includes(scannedUuid)) {
                             resultDiv.style.background = '#fef08a'; // 黄色
-                            resultDiv.innerText = '⚠️ 既に読み取り済みです: ' + itemId;
-                            resetFeedback(itemId);
+                            resultDiv.innerText = '⚠️ 既に読み取り済みです: ' + scannedUuid;
+                            resetFeedback(scannedUuid);
                             return;
                         }
 
                         // 新規読み取りの場合
-                        scannedItems.push(itemId);
+                        scannedItems.push(scannedUuid);
                         resultDiv.style.background = '#d1fae5'; // 緑色
-                        resultDiv.innerText = '✅ 読み取り成功: ' + itemId;
+                        resultDiv.innerText = '✅ 読み取り成功: ' + scannedUuid;
 
-                        // 親ウィンドウ（GAS）へ送信
+                        // 親ウィンドウ（GAS）へ UUID を送信
                         if (window.opener) {
                             window.opener.postMessage(
-                                { type: 'QR_SCANNED', itemId: itemId },
+                                { type: 'QR_SCANNED', uuid: scannedUuid },
                                 TARGET_ORIGIN
                             );
                         }
 
-                        resetFeedback(itemId);
+                        resetFeedback(scannedUuid);
                     }
                 });
 
@@ -280,9 +280,9 @@
             }
         }
 
-        function resetFeedback(currentId) {
+        function resetFeedback(currentUuid) {
             setTimeout(() => {
-                if (lastScannedId === currentId) {
+                if (lastScannedUuid === currentUuid) {
                     resultDiv.style.background = '#fff';
                     resultDiv.innerText = '次のQRコードをかざしてください...';
                 }
